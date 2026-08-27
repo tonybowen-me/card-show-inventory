@@ -133,16 +133,24 @@ export function scoreProduct(product, query) {
   return score;
 }
 
+export function normalizeMarketPrice(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const price = Number(value);
+  return Number.isFinite(price) && price > 0 ? price : null;
+}
+
 export function pickMarketPrice(prices = [], productId) {
   const matching = prices.filter((price) => String(price.productId) === String(productId));
   const preferred = matching.find(
-    (price) => price.subTypeName === "Normal" && Number.isFinite(price.marketPrice)
+    (price) => price.subTypeName === "Normal" && normalizeMarketPrice(price.marketPrice) !== null
   );
-  const fallback = matching.find((price) => Number.isFinite(price.marketPrice));
+  const fallback = matching.find((price) => normalizeMarketPrice(price.marketPrice) !== null);
   return preferred ?? fallback ?? null;
 }
 
 export function priceChartingPrice(product) {
-  const pennies = Number(product?.["loose-price"]);
-  return Number.isFinite(pennies) ? pennies / 100 : null;
+  const pennies = normalizeMarketPrice(product?.["loose-price"]);
+  return pennies === null ? null : pennies / 100;
 }

@@ -37,3 +37,22 @@ test("inventoryToCsv escapes commas and quotes", () => {
   ]);
   assert.match(csv, /"Card, ""Special"""/);
 });
+
+test("inventoryToCsv rounds currency values to cents", () => {
+  const csv = inventoryToCsv([
+    {
+      game: "pokemon",
+      productType: "single",
+      name: "Charizard ex",
+      setName: "Set",
+      number: "1",
+      variant: "normal",
+      quantity: 5,
+      marketPrice: 4.74,
+      sourceLabel: "TCGplayer",
+      updatedAt: "2026-01-01",
+      externalUrl: "https://example.com"
+    }
+  ]);
+  assert.match(csv, /,5,4\.74,23\.70,TCGplayer,/);
+});

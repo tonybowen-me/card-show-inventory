@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   isSealedProduct,
+  normalizeMarketPrice,
   pickMarketPrice,
   priceChartingPrice,
   rankGroups,
@@ -131,23 +132,28 @@ function mapScryfallCard(card) {
     ["Etched", "usd_etched"]
   ];
 
-  return variants
-    .filter(([, key]) => Number.isFinite(Number(card.prices?.[key])))
-    .map(([variant, key]) => ({
-      source: "scryfall",
-      sourceLabel: "TCGplayer",
-      sourceId: card.id,
-      game: "mtg",
-      productType: "single",
-      name: card.name,
-      setName: card.set_name,
-      number: card.collector_number,
-      variant,
-      marketPrice: Number(card.prices[key]),
-      image,
-      externalUrl: card.purchase_uris?.tcgplayer || card.scryfall_uri,
-      sourceUpdatedAt: null
-    }));
+  return variants.flatMap(([variant, key]) => {
+    const marketPrice = normalizeMarketPrice(card.prices?.[key]);
+    return marketPrice === null
+      ? []
+      : [
+          {
+            source: "scryfall",
+            sourceLabel: "TCGplayer",
+            sourceId: card.id,
+            game: "mtg",
+            productType: "single",
+            name: card.name,
+            setName: card.set_name,
+            number: card.collector_number,
+            variant,
+            marketPrice,
+            image,
+            externalUrl: card.purchase_uris?.tcgplayer || card.scryfall_uri,
+            sourceUpdatedAt: null
+          }
+        ];
+  });
 }
 
 async function searchMtgSingles(query) {
@@ -163,23 +169,28 @@ async function searchMtgSingles(query) {
 }
 
 function mapPokemonCard(card) {
-  return Object.entries(card.tcgplayer?.prices || {})
-    .filter(([, price]) => Number.isFinite(price.market))
-    .map(([variant, price]) => ({
-      source: "pokemontcg",
-      sourceLabel: "TCGplayer",
-      sourceId: card.id,
-      game: "pokemon",
-      productType: "single",
-      name: card.name,
-      setName: card.set?.name || "",
-      number: card.number || "",
-      variant,
-      marketPrice: price.market,
-      image: card.images?.small || "",
-      externalUrl: card.tcgplayer?.url || "",
-      sourceUpdatedAt: card.tcgplayer?.updatedAt || null
-    }));
+  return Object.entries(card.tcgplayer?.prices || {}).flatMap(([variant, price]) => {
+    const marketPrice = normalizeMarketPrice(price.market);
+    return marketPrice === null
+      ? []
+      : [
+          {
+            source: "pokemontcg",
+            sourceLabel: "TCGplayer",
+            sourceId: card.id,
+            game: "pokemon",
+            productType: "single",
+            name: card.name,
+            setName: card.set?.name || "",
+            number: card.number || "",
+            variant,
+            marketPrice,
+            image: card.images?.small || "",
+            externalUrl: card.tcgplayer?.url || "",
+            sourceUpdatedAt: card.tcgplayer?.updatedAt || null
+          }
+        ];
+  });
 }
 
 async function searchPokemonSingles(query) {
@@ -249,7 +260,7 @@ async function searchSealed(game, query) {
           };
         })
     )
-    .filter((product) => product.score > 0)
+    .filter((product) => product.score > 0 && product.marketPrice !== null)
     .sort((a, b) => b.score - a.score || (b.marketPrice || 0) - (a.marketPrice || 0))
     .slice(0, 36)
     .map(({ score, ...product }) => product);
@@ -325,9 +336,9 @@ async function refreshPrice(request, url) {
   if (source === "scryfall") {
     const card = await fetchJson(`https://api.scryfall.com/cards/${encodeURIComponent(id)}`);
     const key = { Normal: "usd", Foil: "usd_foil", Etched: "usd_etched" }[variant];
-    const marketPrice = Number(card.prices?.[key]);
+    const marketPrice = normalizeMarketPrice(card.prices?.[key]);
     return {
-      marketPrice: Number.isFinite(marketPrice) ? marketPrice : null,
+      marketPrice,
       sourceUpdatedAt: null
     };
   }
@@ -337,7 +348,7 @@ async function refreshPrice(request, url) {
       `https://api.pokemontcg.io/v2/cards/${encodeURIComponent(id)}?select=id,tcgplayer`
     );
     return {
-      marketPrice: card.data?.tcgplayer?.prices?.[variant]?.market ?? null,
+      marketPrice: normalizeMarketPrice(card.data?.tcgplayer?.prices?.[variant]?.market),
       sourceUpdatedAt: card.data?.tcgplayer?.updatedAt || null
     };
   }

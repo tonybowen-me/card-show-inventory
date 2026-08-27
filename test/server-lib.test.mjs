@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   isSealedProduct,
+  normalizeMarketPrice,
   pickMarketPrice,
   priceChartingPrice,
   rankGroups,
@@ -39,7 +40,26 @@ test("pickMarketPrice prefers normal market pricing", () => {
   assert.equal(price.marketPrice, 10);
 });
 
+test("market prices reject missing and zero values", () => {
+  assert.equal(normalizeMarketPrice(null), null);
+  assert.equal(normalizeMarketPrice(undefined), null);
+  assert.equal(normalizeMarketPrice(""), null);
+  assert.equal(normalizeMarketPrice(0), null);
+  assert.equal(normalizeMarketPrice("4.74"), 4.74);
+  assert.equal(
+    pickMarketPrice(
+      [
+        { productId: 5, subTypeName: "Normal", marketPrice: 0 },
+        { productId: 5, subTypeName: "Holofoil", marketPrice: 20 }
+      ],
+      5
+    ).marketPrice,
+    20
+  );
+});
+
 test("priceChartingPrice converts pennies to dollars", () => {
   assert.equal(priceChartingPrice({ "loose-price": 12345 }), 123.45);
+  assert.equal(priceChartingPrice({ "loose-price": null }), null);
   assert.equal(priceChartingPrice({}), null);
 });

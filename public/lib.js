@@ -8,6 +8,14 @@ export function formatCurrency(value) {
   }).format(Number(value));
 }
 
+export function normalizeMarketPrice(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const price = Number(value);
+  return Number.isFinite(price) && price > 0 ? price : null;
+}
+
 export function formatRelativeDate(value) {
   if (!value) {
     return "Never";
@@ -70,20 +78,24 @@ export function inventoryToCsv(items) {
     "Last Refreshed",
     "Product URL"
   ];
-  const rows = items.map((item) => [
-    item.game === "mtg" ? "Magic: The Gathering" : "Pokémon",
-    item.productType,
-    item.name,
-    item.setName,
-    item.number,
-    item.variant,
-    item.quantity,
-    item.marketPrice,
-    (Number(item.marketPrice) || 0) * (Number(item.quantity) || 0),
-    item.sourceLabel,
-    item.updatedAt,
-    item.externalUrl
-  ]);
+  const rows = items.map((item) => {
+    const marketPrice = normalizeMarketPrice(item.marketPrice);
+    const quantity = Number(item.quantity) || 0;
+    return [
+      item.game === "mtg" ? "Magic: The Gathering" : "Pokémon",
+      item.productType,
+      item.name,
+      item.setName,
+      item.number,
+      item.variant,
+      item.quantity,
+      marketPrice === null ? "" : marketPrice.toFixed(2),
+      marketPrice === null ? "" : (marketPrice * quantity).toFixed(2),
+      item.sourceLabel,
+      item.updatedAt,
+      item.externalUrl
+    ];
+  });
   return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
 }
 

@@ -4,6 +4,7 @@ import {
   formatRelativeDate,
   inventoryKey,
   inventoryToCsv,
+  normalizeMarketPrice,
   summarizeInventory
 } from "./lib.js";
 
@@ -392,11 +393,12 @@ async function refreshItem(item, render = true) {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Refresh failed.");
-    if (!Number.isFinite(Number(data.marketPrice))) {
+    const marketPrice = normalizeMarketPrice(data.marketPrice);
+    if (marketPrice === null) {
       throw new Error("No current market price.");
     }
     item.previousPrice = Number(item.marketPrice);
-    item.marketPrice = Number(data.marketPrice);
+    item.marketPrice = marketPrice;
     item.sourceUpdatedAt = data.sourceUpdatedAt || item.sourceUpdatedAt;
     item.updatedAt = new Date().toISOString();
     item.priceError = "";
