@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#11140f" />
+    <meta
+      name="description"
+      content="Fast local-first MTG and Pokémon inventory with TCGplayer and PriceCharting prices."
+    />
+    <title>Card Show Inventory</title>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Local-first · no account</p>
+        <h1>Card Show Inventory</h1>
+      </div>
+      <button class="primary refresh-button" id="refreshAllButton" type="button">
+        <span aria-hidden="true">↻</span>
+        <span id="refreshButtonLabel">Refresh all prices</span>
+      </button>
+    </header>
+
+    <main>
+      <section class="summary-grid" aria-label="Inventory summary">
+        <article>
+          <span>Products</span>
+          <strong id="productCount">0</strong>
+        </article>
+        <article>
+          <span>Total units</span>
+          <strong id="unitCount">0</strong>
+        </article>
+        <article class="market-total">
+          <span>Market value</span>
+          <strong id="marketValue">$0.00</strong>
+        </article>
+        <article>
+          <span>Last refresh</span>
+          <strong class="summary-date" id="lastRefresh">Never</strong>
+        </article>
+      </section>
+
+      <section class="panel search-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Add inventory</p>
+            <h2>Find a product</h2>
+          </div>
+          <details class="settings" id="settingsPanel">
+            <summary>Settings</summary>
+            <div class="settings-popover">
+              <label for="priceChartingToken">PriceCharting API token</label>
+              <input
+                id="priceChartingToken"
+                type="password"
+                autocomplete="off"
+                placeholder="Optional paid API token"
+              />
+              <p>Saved only in this browser. Required only when PriceCharting is selected.</p>
+              <button class="secondary" id="saveSettingsButton" type="button">Save settings</button>
+            </div>
+          </details>
+        </div>
+
+        <form id="searchForm">
+          <div class="search-options">
+            <label>
+              Game
+              <select id="gameSelect">
+                <option value="mtg">Magic: The Gathering</option>
+                <option value="pokemon">Pokémon</option>
+              </select>
+            </label>
+            <label>
+              Product
+              <select id="productTypeSelect">
+                <option value="single">Single</option>
+                <option value="sealed">Sealed</option>
+              </select>
+            </label>
+            <label>
+              Price source
+              <select id="sourceSelect">
+                <option value="tcgplayer">TCGplayer</option>
+                <option value="pricecharting">PriceCharting</option>
+              </select>
+            </label>
+          </div>
+          <div class="search-row">
+            <label class="sr-only" for="searchInput">Product name</label>
+            <input
+              id="searchInput"
+              type="search"
+              minlength="2"
+              maxlength="100"
+              placeholder="Try “Lightning Bolt”"
+              required
+              autofocus
+            />
+            <button class="primary" id="searchButton" type="submit">Search prices</button>
+          </div>
+          <p class="search-hint" id="searchHint">
+            Search by card name. Choose the exact printing and finish from the results.
+          </p>
+        </form>
+
+        <div class="status-message" id="searchStatus" role="status" hidden></div>
+        <div class="search-results" id="searchResults"></div>
+      </section>
+
+      <section class="panel inventory-panel">
+        <div class="section-heading inventory-heading">
+          <div>
+            <p class="eyebrow">Your stock</p>
+            <h2>Inventory</h2>
+          </div>
+          <div class="inventory-actions">
+            <button class="secondary" id="exportCsvButton" type="button">Export CSV</button>
+            <button class="secondary" id="backupButton" type="button">Backup</button>
+            <label class="secondary file-button">
+              Restore
+              <input id="restoreInput" type="file" accept="application/json,.json" />
+            </label>
+          </div>
+        </div>
+
+        <div class="inventory-toolbar">
+          <label class="filter-field">
+            <span class="sr-only">Filter inventory</span>
+            <input id="inventoryFilter" type="search" placeholder="Filter inventory" />
+          </label>
+          <label>
+            <span class="sr-only">Sort inventory</span>
+            <select id="inventorySort">
+              <option value="added">Recently added</option>
+              <option value="name">Name</option>
+              <option value="value">Total value</option>
+              <option value="price">Unit price</option>
+              <option value="updated">Recently refreshed</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon" aria-hidden="true">◇</div>
+          <h3>Your inventory is empty</h3>
+          <p>Search above, choose a printing, and add it here.</p>
+        </div>
+        <div class="inventory-list" id="inventoryList"></div>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        Prices are estimates, not offers. TCGplayer data is supplied through Scryfall, Pokémon TCG
+        API, and TCGCSV.
+      </p>
+      <span id="onlineStatus">Online</span>
+    </footer>
+
+    <template id="imageFallbackTemplate">
+      <div class="image-fallback" aria-hidden="true">TCG</div>
+    </template>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

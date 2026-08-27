@@ -1,0 +1,16 @@
+{
+  "name": "card-show-inventory",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lightweight local-first TCG inventory and market price tracker.",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node --watch server.mjs",
+    "lint": "node --check server.mjs && node --check server-lib.mjs && node --check public/app.js && node --check public/lib.js && node --check public/sw.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
