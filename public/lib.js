@@ -61,6 +61,10 @@ export function normalizePercentage(value, fallback = 0) {
   return Math.min(100, Math.max(0, Number(value) || 0));
 }
 
+function roundCurrency(value) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
 export function calculateBuyOffer(
   item,
   defaultBuyPercent,
@@ -72,13 +76,13 @@ export function calculateBuyOffer(
     DEFAULT_CONDITION_PERCENTAGES[item.condition] ?? 100
   );
   const buyPercent = normalizePercentage(item.buyPercent, defaultBuyPercent);
-  const conditionedValue = marketPrice * (conditionPercent / 100);
+  const conditionedValue = roundCurrency(marketPrice * (conditionPercent / 100));
   return {
     marketPrice,
     conditionPercent,
     buyPercent,
     conditionedValue,
-    offer: conditionedValue * (buyPercent / 100)
+    offer: roundCurrency(conditionedValue * (buyPercent / 100))
   };
 }
 

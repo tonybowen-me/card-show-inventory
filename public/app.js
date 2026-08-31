@@ -432,7 +432,8 @@ function renderView() {
   elements.buyPanel.hidden = !buying;
   elements.searchEyebrow.textContent = buying ? "Build an offer" : "Add inventory";
   elements.searchTitle.textContent = buying ? "Add cards to this buy" : "Find a product";
-  elements.refreshButtonLabel.textContent = buying ? "Refresh buy prices" : "Refresh all prices";
+  elements.refreshButtonLabel.textContent =
+    state.view === "buy" ? "Refresh buy prices" : "Refresh all prices";
   for (const button of elements.viewButtons) {
     const active = button.dataset.view === state.view;
     button.classList.toggle("active", active);
@@ -653,7 +654,8 @@ async function refreshAll() {
     await refresh(item);
   }
 
-  elements.refreshButtonLabel.textContent = buying ? "Refresh buy prices" : "Refresh all prices";
+  elements.refreshButtonLabel.textContent =
+    state.view === "buy" ? "Refresh buy prices" : "Refresh all prices";
   elements.refreshAllButton.disabled = false;
   state.refreshing = false;
 }

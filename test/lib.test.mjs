@@ -62,6 +62,19 @@ test("summarizeBuySession totals market, conditioned, and offer values", () => {
   );
 });
 
+test("summarizeBuySession sums the same cent-rounded amounts shown per card", () => {
+  const items = [
+    { marketPrice: 4.74, condition: "lightlyPlayed", buyPercent: "" },
+    { marketPrice: 4.74, condition: "lightlyPlayed", buyPercent: "" }
+  ];
+  assert.deepEqual(summarizeBuySession(items, 70), {
+    cards: 2,
+    marketValue: 9.48,
+    conditionedValue: 8.54,
+    offerTotal: 5.98
+  });
+});
+
 test("normalizePercentage clamps values between zero and one hundred", () => {
   assert.equal(normalizePercentage(125), 100);
   assert.equal(normalizePercentage(-5), 0);
