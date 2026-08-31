@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { inventoryKey, inventoryToCsv, summarizeInventory } from "../public/lib.js";
+import {
+  calculateBuyOffer,
+  inventoryKey,
+  inventoryToCsv,
+  normalizePercentage,
+  summarizeBuySession,
+  summarizeInventory
+} from "../public/lib.js";
 
 test("inventoryKey distinguishes finishes", () => {
   assert.equal(
@@ -17,6 +24,48 @@ test("summarizeInventory includes quantities and market value", () => {
     ]),
     { products: 2, units: 5, marketValue: 27.5 }
   );
+});
+
+test("calculateBuyOffer applies condition and card-level buy percentages", () => {
+  assert.deepEqual(
+    calculateBuyOffer(
+      { marketPrice: 100, condition: "lightlyPlayed", buyPercent: 60 },
+      70
+    ),
+    {
+      marketPrice: 100,
+      conditionPercent: 90,
+      buyPercent: 60,
+      conditionedValue: 90,
+      offer: 54
+    }
+  );
+});
+
+test("calculateBuyOffer falls back to the transaction buy percentage", () => {
+  assert.equal(
+    calculateBuyOffer({ marketPrice: 20, condition: "nearMint", buyPercent: "" }, 65).offer,
+    13
+  );
+});
+
+test("summarizeBuySession totals market, conditioned, and offer values", () => {
+  assert.deepEqual(
+    summarizeBuySession(
+      [
+        { marketPrice: 100, condition: "nearMint", buyPercent: "" },
+        { marketPrice: 50, condition: "damaged", buyPercent: 50 }
+      ],
+      70
+    ),
+    { cards: 2, marketValue: 150, conditionedValue: 120, offerTotal: 80 }
+  );
+});
+
+test("normalizePercentage clamps values between zero and one hundred", () => {
+  assert.equal(normalizePercentage(125), 100);
+  assert.equal(normalizePercentage(-5), 0);
+  assert.equal(normalizePercentage("", 70), 70);
 });
 
 test("inventoryToCsv escapes commas and quotes", () => {

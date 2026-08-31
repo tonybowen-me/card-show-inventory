@@ -46,6 +46,59 @@ export function inventoryKey(item) {
   return [item.source, item.sourceId, item.variant].join(":");
 }
 
+export const DEFAULT_CONDITION_PERCENTAGES = Object.freeze({
+  nearMint: 100,
+  lightlyPlayed: 90,
+  moderatelyPlayed: 75,
+  heavilyPlayed: 60,
+  damaged: 40
+});
+
+export function normalizePercentage(value, fallback = 0) {
+  if (value === null || value === undefined || value === "") {
+    return Math.min(100, Math.max(0, Number(fallback) || 0));
+  }
+  return Math.min(100, Math.max(0, Number(value) || 0));
+}
+
+export function calculateBuyOffer(
+  item,
+  defaultBuyPercent,
+  conditionPercentages = DEFAULT_CONDITION_PERCENTAGES
+) {
+  const marketPrice = normalizeMarketPrice(item.marketPrice) || 0;
+  const conditionPercent = normalizePercentage(
+    conditionPercentages[item.condition],
+    DEFAULT_CONDITION_PERCENTAGES[item.condition] ?? 100
+  );
+  const buyPercent = normalizePercentage(item.buyPercent, defaultBuyPercent);
+  const conditionedValue = marketPrice * (conditionPercent / 100);
+  return {
+    marketPrice,
+    conditionPercent,
+    buyPercent,
+    conditionedValue,
+    offer: conditionedValue * (buyPercent / 100)
+  };
+}
+
+export function summarizeBuySession(
+  items,
+  defaultBuyPercent,
+  conditionPercentages = DEFAULT_CONDITION_PERCENTAGES
+) {
+  return items.reduce(
+    (summary, item) => {
+      const calculation = calculateBuyOffer(item, defaultBuyPercent, conditionPercentages);
+      summary.marketValue += calculation.marketPrice;
+      summary.conditionedValue += calculation.conditionedValue;
+      summary.offerTotal += calculation.offer;
+      return summary;
+    },
+    { cards: items.length, marketValue: 0, conditionedValue: 0, offerTotal: 0 }
+  );
+}
+
 export function summarizeInventory(items) {
   return items.reduce(
     (summary, item) => {
