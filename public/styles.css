@@ -654,6 +654,14 @@ select:focus {
   flex-shrink: 0;
 }
 
+.local-session-actions .text-button,
+.current-session {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 6px;
+}
+
 .current-session {
   color: var(--accent) !important;
   font-weight: 750;
