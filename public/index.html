@@ -15,9 +15,13 @@
   </head>
   <body>
     <header class="app-header">
-      <div>
+      <div class="header-copy">
         <p class="eyebrow">Local-first · no account</p>
         <h1>Card Show Inventory</h1>
+        <nav class="view-switcher" aria-label="App section">
+          <button class="active" data-view="inventory" type="button">Inventory</button>
+          <button data-view="buy" type="button">Buy Session</button>
+        </nav>
       </div>
       <button class="primary refresh-button" id="refreshAllButton" type="button">
         <span aria-hidden="true">↻</span>
@@ -26,7 +30,7 @@
     </header>
 
     <main>
-      <section class="summary-grid" aria-label="Inventory summary">
+      <section class="summary-grid" id="inventorySummary" aria-label="Inventory summary">
         <article>
           <span>Products</span>
           <strong id="productCount">0</strong>
@@ -45,11 +49,30 @@
         </article>
       </section>
 
+      <section class="summary-grid" id="buySummary" aria-label="Buy session summary" hidden>
+        <article>
+          <span>Cards</span>
+          <strong id="buyCardCount">0</strong>
+        </article>
+        <article>
+          <span>Market value</span>
+          <strong id="buyMarketValue">$0.00</strong>
+        </article>
+        <article>
+          <span>Condition value</span>
+          <strong id="buyConditionedValue">$0.00</strong>
+        </article>
+        <article class="market-total">
+          <span>Cash offer</span>
+          <strong id="buyOfferTotal">$0.00</strong>
+        </article>
+      </section>
+
       <section class="panel search-panel">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Add inventory</p>
-            <h2>Find a product</h2>
+            <p class="eyebrow" id="searchEyebrow">Add inventory</p>
+            <h2 id="searchTitle">Find a product</h2>
           </div>
           <details class="settings" id="settingsPanel">
             <summary>Settings</summary>
@@ -113,7 +136,7 @@
         <div class="search-results" id="searchResults"></div>
       </section>
 
-      <section class="panel inventory-panel">
+      <section class="panel inventory-panel" id="inventoryPanel">
         <div class="section-heading inventory-heading">
           <div>
             <p class="eyebrow">Your stock</p>
@@ -152,6 +175,50 @@
           <p>Search above, choose a printing, and add it here.</p>
         </div>
         <div class="inventory-list" id="inventoryList"></div>
+      </section>
+
+      <section class="panel buy-panel" id="buyPanel" hidden>
+        <div class="section-heading buy-heading">
+          <div>
+            <p class="eyebrow">Current transaction</p>
+            <h2>Buy Session</h2>
+          </div>
+          <div class="inventory-actions">
+            <details class="settings buy-settings" id="buySettingsPanel">
+              <summary>Condition values</summary>
+              <div class="settings-popover condition-settings">
+                <p>Set each condition's percentage of near-mint market value.</p>
+                <div class="condition-settings-grid">
+                  <label>Near Mint <input data-condition-setting="nearMint" type="number" min="0" max="100" /></label>
+                  <label>Lightly Played <input data-condition-setting="lightlyPlayed" type="number" min="0" max="100" /></label>
+                  <label>Moderately Played <input data-condition-setting="moderatelyPlayed" type="number" min="0" max="100" /></label>
+                  <label>Heavily Played <input data-condition-setting="heavilyPlayed" type="number" min="0" max="100" /></label>
+                  <label>Damaged <input data-condition-setting="damaged" type="number" min="0" max="100" /></label>
+                </div>
+                <button class="secondary" id="saveConditionSettingsButton" type="button">Save condition values</button>
+              </div>
+            </details>
+            <button class="secondary" id="clearBuySessionButton" type="button">New session</button>
+          </div>
+        </div>
+
+        <div class="buy-transaction-bar">
+          <label for="defaultBuyPercent">
+            Transaction buy %
+            <span>Used unless a card has its own percentage.</span>
+          </label>
+          <div class="percent-field">
+            <input id="defaultBuyPercent" type="number" min="0" max="100" step="1" value="70" />
+            <span>%</span>
+          </div>
+        </div>
+
+        <div class="empty-state" id="buyEmptyState">
+          <div class="empty-icon" aria-hidden="true">◇</div>
+          <h3>No cards in this buy session</h3>
+          <p>Search above and add each card the seller brings you.</p>
+        </div>
+        <div class="buy-list" id="buyList"></div>
       </section>
     </main>
 

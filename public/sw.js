@@ -1,4 +1,4 @@
-const CACHE_NAME = "card-show-inventory-v1";
+const CACHE_NAME = "card-show-inventory-v2";
 const APP_SHELL = [
   "/",
   "/app.js",

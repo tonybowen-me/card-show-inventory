@@ -1,24 +1,49 @@
 import {
+  calculateBuyOffer,
+  DEFAULT_CONDITION_PERCENTAGES,
   escapeHtml,
   formatCurrency,
   formatRelativeDate,
   inventoryKey,
   inventoryToCsv,
+  normalizePercentage,
   normalizeMarketPrice,
+  summarizeBuySession,
   summarizeInventory
 } from "./lib.js";
 
 const STORAGE_KEY = "card-show-inventory:v1";
 const SETTINGS_KEY = "card-show-inventory:settings:v1";
+const BUY_SESSION_KEY = "card-show-inventory:buy-session:v1";
+const CONDITIONS = [
+  ["nearMint", "Near Mint"],
+  ["lightlyPlayed", "Lightly Played"],
+  ["moderatelyPlayed", "Moderately Played"],
+  ["heavilyPlayed", "Heavily Played"],
+  ["damaged", "Damaged"]
+];
 
 const elements = {
   backupButton: document.querySelector("#backupButton"),
+  buyCardCount: document.querySelector("#buyCardCount"),
+  buyConditionedValue: document.querySelector("#buyConditionedValue"),
+  buyEmptyState: document.querySelector("#buyEmptyState"),
+  buyList: document.querySelector("#buyList"),
+  buyMarketValue: document.querySelector("#buyMarketValue"),
+  buyOfferTotal: document.querySelector("#buyOfferTotal"),
+  buyPanel: document.querySelector("#buyPanel"),
+  buySummary: document.querySelector("#buySummary"),
+  clearBuySessionButton: document.querySelector("#clearBuySessionButton"),
+  conditionSettings: [...document.querySelectorAll("[data-condition-setting]")],
+  defaultBuyPercent: document.querySelector("#defaultBuyPercent"),
   emptyState: document.querySelector("#emptyState"),
   exportCsvButton: document.querySelector("#exportCsvButton"),
   gameSelect: document.querySelector("#gameSelect"),
   inventoryFilter: document.querySelector("#inventoryFilter"),
   inventoryList: document.querySelector("#inventoryList"),
+  inventoryPanel: document.querySelector("#inventoryPanel"),
   inventorySort: document.querySelector("#inventorySort"),
+  inventorySummary: document.querySelector("#inventorySummary"),
   lastRefresh: document.querySelector("#lastRefresh"),
   marketValue: document.querySelector("#marketValue"),
   onlineStatus: document.querySelector("#onlineStatus"),
@@ -28,26 +53,47 @@ const elements = {
   refreshAllButton: document.querySelector("#refreshAllButton"),
   refreshButtonLabel: document.querySelector("#refreshButtonLabel"),
   restoreInput: document.querySelector("#restoreInput"),
+  saveConditionSettingsButton: document.querySelector("#saveConditionSettingsButton"),
   saveSettingsButton: document.querySelector("#saveSettingsButton"),
   searchButton: document.querySelector("#searchButton"),
   searchForm: document.querySelector("#searchForm"),
   searchHint: document.querySelector("#searchHint"),
+  searchEyebrow: document.querySelector("#searchEyebrow"),
   searchInput: document.querySelector("#searchInput"),
   searchResults: document.querySelector("#searchResults"),
   searchStatus: document.querySelector("#searchStatus"),
+  searchTitle: document.querySelector("#searchTitle"),
   settingsPanel: document.querySelector("#settingsPanel"),
   sourceSelect: document.querySelector("#sourceSelect"),
-  unitCount: document.querySelector("#unitCount")
+  unitCount: document.querySelector("#unitCount"),
+  viewButtons: [...document.querySelectorAll("[data-view]")]
 };
 
+const savedSettings = readJson(SETTINGS_KEY, {});
+const savedBuySession = readJson(BUY_SESSION_KEY, {});
 const state = {
   inventory: readJson(STORAGE_KEY, []),
-  settings: readJson(SETTINGS_KEY, { priceChartingToken: "" }),
+  settings: {
+    priceChartingToken: savedSettings.priceChartingToken || "",
+    conditionPercentages: {
+      ...DEFAULT_CONDITION_PERCENTAGES,
+      ...(savedSettings.conditionPercentages || {})
+    }
+  },
+  buySession: {
+    items: Array.isArray(savedBuySession.items) ? savedBuySession.items : [],
+    defaultBuyPercent: normalizePercentage(savedBuySession.defaultBuyPercent, 70)
+  },
   searchResults: [],
-  refreshing: false
+  refreshing: false,
+  view: location.hash === "#buy" ? "buy" : "inventory"
 };
 
 elements.priceChartingToken.value = state.settings.priceChartingToken || "";
+elements.defaultBuyPercent.value = state.buySession.defaultBuyPercent;
+for (const input of elements.conditionSettings) {
+  input.value = state.settings.conditionPercentages[input.dataset.conditionSetting];
+}
 
 function readJson(key, fallback) {
   try {
@@ -60,6 +106,10 @@ function readJson(key, fallback) {
 
 function saveInventory() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.inventory));
+}
+
+function saveBuySession() {
+  localStorage.setItem(BUY_SESSION_KEY, JSON.stringify(state.buySession));
 }
 
 function saveSettings() {
@@ -139,7 +189,9 @@ function renderSearchResults() {
                 </div>
                 <div class="result-actions">
                   ${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">View listing</a>` : ""}
-                  <button class="primary compact" data-add-result="${index}" type="button">Add</button>
+                  <button class="primary compact" data-add-result="${index}" type="button">${
+                    state.view === "buy" ? "Add to buy" : "Add"
+                  }</button>
                 </div>
               </div>
             </article>
@@ -267,6 +319,131 @@ function renderInventory() {
     .join("");
 }
 
+function conditionOptions(selected) {
+  return CONDITIONS.map(
+    ([value, label]) =>
+      `<option value="${value}"${value === selected ? " selected" : ""}>${label}</option>`
+  ).join("");
+}
+
+function renderBuySession() {
+  const summary = summarizeBuySession(
+    state.buySession.items,
+    state.buySession.defaultBuyPercent,
+    state.settings.conditionPercentages
+  );
+  elements.buyCardCount.textContent = summary.cards.toLocaleString();
+  elements.buyMarketValue.textContent = formatCurrency(summary.marketValue);
+  elements.buyConditionedValue.textContent = formatCurrency(summary.conditionedValue);
+  elements.buyOfferTotal.textContent = formatCurrency(summary.offerTotal);
+  elements.buyEmptyState.hidden = state.buySession.items.length > 0;
+
+  elements.buyList.innerHTML = state.buySession.items
+    .map((item) => {
+      const id = escapeHtml(item.buyItemId);
+      const calculation = calculateBuyOffer(
+        item,
+        state.buySession.defaultBuyPercent,
+        state.settings.conditionPercentages
+      );
+      const url = safeExternalUrl(item.externalUrl);
+      const override = item.buyPercent === "" || item.buyPercent === null ? "" : item.buyPercent;
+      return `
+        <article class="inventory-item buy-item ${item.priceError ? "has-error" : ""}">
+          ${productImage(item, "inventory-image")}
+          <div class="inventory-product">
+            <div class="inventory-name-row">
+              <div>
+                <span class="pill">${item.game === "mtg" ? "MTG" : "Pokémon"} · ${escapeHtml(
+                  item.productType
+                )}</span>
+                <h3>${escapeHtml(item.name)}</h3>
+                <p>${escapeHtml(item.setName)}${item.number ? ` · #${escapeHtml(item.number)}` : ""}</p>
+                <p class="variant">${escapeHtml(variantLabel(item.variant))} · ${escapeHtml(
+                  item.sourceLabel
+                )}</p>
+              </div>
+              <button class="icon-button delete-button" data-buy-delete="${id}" type="button" aria-label="Remove ${escapeHtml(
+                item.name
+              )}">×</button>
+            </div>
+            <div class="buy-metrics">
+              <div>
+                <span>Market</span>
+                <strong>${formatCurrency(calculation.marketPrice)}</strong>
+                ${priceChange(item)}
+              </div>
+              <label>
+                <span>Condition</span>
+                <select data-buy-condition="${id}">
+                  ${conditionOptions(item.condition)}
+                </select>
+                <small>${calculation.conditionPercent}% · ${formatCurrency(
+                  calculation.conditionedValue
+                )}</small>
+              </label>
+              <label>
+                <span>Buy %</span>
+                <div class="percent-field compact-percent">
+                  <input
+                    data-buy-percent="${id}"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value="${escapeHtml(override)}"
+                    placeholder="${state.buySession.defaultBuyPercent}"
+                    aria-label="Buy percentage for ${escapeHtml(item.name)}"
+                  />
+                  <span>%</span>
+                </div>
+                <small>${override === "" ? "Transaction default" : "Card override"}</small>
+              </label>
+              <div class="offer-value">
+                <span>Offer</span>
+                <strong>${formatCurrency(calculation.offer)}</strong>
+              </div>
+            </div>
+            <div class="inventory-meta">
+              <span class="${item.priceError ? "error-text" : ""}">
+                ${
+                  item.priceError
+                    ? escapeHtml(item.priceError)
+                    : `Updated ${formatRelativeDate(item.updatedAt)}`
+                }
+              </span>
+              <div>
+                ${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">Source</a>` : ""}
+                <button class="text-button" data-buy-refresh="${id}" type="button">Refresh</button>
+              </div>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderView() {
+  const buying = state.view === "buy";
+  elements.inventorySummary.hidden = buying;
+  elements.inventoryPanel.hidden = buying;
+  elements.buySummary.hidden = !buying;
+  elements.buyPanel.hidden = !buying;
+  elements.searchEyebrow.textContent = buying ? "Build an offer" : "Add inventory";
+  elements.searchTitle.textContent = buying ? "Add cards to this buy" : "Find a product";
+  elements.refreshButtonLabel.textContent =
+    state.view === "buy" ? "Refresh buy prices" : "Refresh all prices";
+  for (const button of elements.viewButtons) {
+    const active = button.dataset.view === state.view;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  }
+  renderSearchResults();
+  renderInventory();
+  renderBuySession();
+}
+
 function updateSearchHint() {
   const type = elements.productTypeSelect.value;
   const source = elements.sourceSelect.value;
@@ -343,6 +520,22 @@ async function search(event) {
 function addResult(index) {
   const result = state.searchResults[index];
   if (!result) return;
+  if (state.view === "buy") {
+    state.buySession.items.unshift({
+      ...result,
+      buyItemId: crypto.randomUUID(),
+      condition: "nearMint",
+      buyPercent: "",
+      previousPrice: null,
+      addedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      priceError: ""
+    });
+    saveBuySession();
+    renderBuySession();
+    showStatus(`${result.name} added to this buy.`, "success");
+    return;
+  }
   const key = inventoryKey(result);
   const existing = state.inventory.find((item) => inventoryKey(item) === key);
   if (existing) {
@@ -366,6 +559,10 @@ function findInventoryItem(key) {
   return state.inventory.find((item) => inventoryKey(item) === key);
 }
 
+function findBuyItem(id) {
+  return state.buySession.items.find((item) => item.buyItemId === id);
+}
+
 function updateQuantity(key, value) {
   const item = findInventoryItem(key);
   if (!item) return;
@@ -384,7 +581,7 @@ function priceUrl(item) {
   return url;
 }
 
-async function refreshItem(item, render = true) {
+async function updateMarketPrice(item) {
   try {
     const response = await fetch(priceUrl(item), {
       headers: state.settings.priceChartingToken
@@ -405,8 +602,18 @@ async function refreshItem(item, render = true) {
   } catch (error) {
     item.priceError = error.message;
   }
+}
+
+async function refreshInventoryItem(item) {
+  await updateMarketPrice(item);
   saveInventory();
-  if (render) renderInventory();
+  renderInventory();
+}
+
+async function refreshBuyItem(item) {
+  await updateMarketPrice(item);
+  saveBuySession();
+  renderBuySession();
 }
 
 async function runPool(items, concurrency, worker) {
@@ -420,18 +627,26 @@ async function runPool(items, concurrency, worker) {
 }
 
 async function refreshAll() {
-  if (!state.inventory.length || state.refreshing) return;
+  const buying = state.view === "buy";
+  const items = buying ? state.buySession.items : state.inventory;
+  if (!items.length || state.refreshing) return;
   state.refreshing = true;
   elements.refreshAllButton.disabled = true;
-  const normal = state.inventory.filter((item) => item.source !== "pricecharting");
-  const priceCharting = state.inventory.filter((item) => item.source === "pricecharting");
+  const normal = items.filter((item) => item.source !== "pricecharting");
+  const priceCharting = items.filter((item) => item.source === "pricecharting");
   let completed = 0;
-  const total = state.inventory.length;
+  const total = items.length;
   const refresh = async (item) => {
     elements.refreshButtonLabel.textContent = `Refreshing ${completed + 1} of ${total}`;
-    await refreshItem(item, false);
+    await updateMarketPrice(item);
     completed += 1;
-    renderInventory();
+    if (buying) {
+      saveBuySession();
+      renderBuySession();
+    } else {
+      saveInventory();
+      renderInventory();
+    }
   };
 
   await runPool(normal, 4, refresh);
@@ -439,7 +654,8 @@ async function refreshAll() {
     await refresh(item);
   }
 
-  elements.refreshButtonLabel.textContent = "Refresh all prices";
+  elements.refreshButtonLabel.textContent =
+    state.view === "buy" ? "Refresh buy prices" : "Refresh all prices";
   elements.refreshAllButton.disabled = false;
   state.refreshing = false;
 }
@@ -471,7 +687,7 @@ elements.inventoryList.addEventListener("click", async (event) => {
     if (item) {
       refreshButton.disabled = true;
       refreshButton.textContent = "Refreshing…";
-      await refreshItem(item);
+      await refreshInventoryItem(item);
     }
   }
 });
@@ -483,6 +699,93 @@ elements.inventoryList.addEventListener("change", (event) => {
 elements.refreshAllButton.addEventListener("click", refreshAll);
 elements.inventoryFilter.addEventListener("input", renderInventory);
 elements.inventorySort.addEventListener("change", renderInventory);
+elements.buyList.addEventListener("click", async (event) => {
+  const deleteButton = event.target.closest("[data-buy-delete]");
+  if (deleteButton) {
+    state.buySession.items = state.buySession.items.filter(
+      (item) => item.buyItemId !== deleteButton.dataset.buyDelete
+    );
+    saveBuySession();
+    renderBuySession();
+    return;
+  }
+  const refreshButton = event.target.closest("[data-buy-refresh]");
+  if (refreshButton) {
+    const item = findBuyItem(refreshButton.dataset.buyRefresh);
+    if (item) {
+      refreshButton.disabled = true;
+      refreshButton.textContent = "Refreshing…";
+      await refreshBuyItem(item);
+    }
+  }
+});
+elements.buyList.addEventListener("change", (event) => {
+  const conditionSelect = event.target.closest("[data-buy-condition]");
+  if (conditionSelect) {
+    const item = findBuyItem(conditionSelect.dataset.buyCondition);
+    if (item) {
+      item.condition = conditionSelect.value;
+      saveBuySession();
+      renderBuySession();
+    }
+    return;
+  }
+  const buyPercentInput = event.target.closest("[data-buy-percent]");
+  if (buyPercentInput) {
+    const item = findBuyItem(buyPercentInput.dataset.buyPercent);
+    if (item) {
+      item.buyPercent =
+        buyPercentInput.value === "" ? "" : normalizePercentage(buyPercentInput.value);
+      saveBuySession();
+      renderBuySession();
+    }
+  }
+});
+elements.defaultBuyPercent.addEventListener("change", () => {
+  state.buySession.defaultBuyPercent = normalizePercentage(elements.defaultBuyPercent.value, 70);
+  elements.defaultBuyPercent.value = state.buySession.defaultBuyPercent;
+  saveBuySession();
+  renderBuySession();
+});
+elements.clearBuySessionButton.addEventListener("click", () => {
+  if (
+    state.buySession.items.length &&
+    !window.confirm("Clear every card and start a new buy session?")
+  ) {
+    return;
+  }
+  state.buySession.items = [];
+  saveBuySession();
+  renderBuySession();
+  state.searchResults = [];
+  renderSearchResults();
+  hideStatus();
+});
+elements.saveConditionSettingsButton.addEventListener("click", () => {
+  for (const input of elements.conditionSettings) {
+    const condition = input.dataset.conditionSetting;
+    state.settings.conditionPercentages[condition] = normalizePercentage(
+      input.value,
+      DEFAULT_CONDITION_PERCENTAGES[condition]
+    );
+    input.value = state.settings.conditionPercentages[condition];
+  }
+  saveSettings();
+  document.querySelector("#buySettingsPanel").open = false;
+  renderBuySession();
+  showStatus("Condition values saved in this browser.", "success");
+});
+for (const button of elements.viewButtons) {
+  button.addEventListener("click", () => {
+    location.hash = button.dataset.view === "buy" ? "buy" : "inventory";
+  });
+}
+window.addEventListener("hashchange", () => {
+  state.view = location.hash === "#buy" ? "buy" : "inventory";
+  state.searchResults = [];
+  hideStatus();
+  renderView();
+});
 [elements.gameSelect, elements.productTypeSelect, elements.sourceSelect].forEach((element) =>
   element.addEventListener("change", updateSearchHint)
 );
@@ -532,7 +835,7 @@ window.addEventListener("online", updateOnlineStatus);
 window.addEventListener("offline", updateOnlineStatus);
 updateOnlineStatus();
 updateSearchHint();
-renderInventory();
+renderView();
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => undefined);
