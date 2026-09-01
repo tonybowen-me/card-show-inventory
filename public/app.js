@@ -99,7 +99,11 @@ const state = {
   refreshing: false,
   view: location.hash === "#buy" ? "buy" : "inventory"
 };
-localStorage.setItem(BUY_SESSION_STORE_KEY, JSON.stringify(savedBuySessionStore));
+if (writeJson(BUY_SESSION_STORE_KEY, savedBuySessionStore)) {
+  removeStorageItem(BUY_SESSION_KEY);
+} else {
+  showStatus("Local session storage is unavailable or full. Changes may not persist.", "error");
+}
 
 elements.priceChartingToken.value = state.settings.priceChartingToken || "";
 elements.defaultBuyPercent.value = state.buySession.defaultBuyPercent;
@@ -116,21 +120,41 @@ function readJson(key, fallback) {
   }
 }
 
+function writeJson(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function removeStorageItem(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    return;
+  }
+}
+
 function saveInventory() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.inventory));
 }
 
-function saveBuySession(touch = true) {
+function saveBuySession(touch = true, session = state.buySession) {
   if (touch) {
-    state.buySession.updatedAt = new Date().toISOString();
+    session.updatedAt = new Date().toISOString();
   }
-  localStorage.setItem(
-    BUY_SESSION_STORE_KEY,
-    JSON.stringify({
-      activeSessionId: state.buySession.id,
-      sessions: state.buySessions
-    })
-  );
+  const saved = writeJson(BUY_SESSION_STORE_KEY, {
+    activeSessionId: state.buySession.id,
+    sessions: state.buySessions
+  });
+  if (saved) {
+    removeStorageItem(BUY_SESSION_KEY);
+  } else {
+    showStatus("Local session storage is unavailable or full. Changes may not persist.", "error");
+  }
+  return saved;
 }
 
 function createBuySession(name = "") {
@@ -716,9 +740,15 @@ async function refreshInventoryItem(item) {
 }
 
 async function refreshBuyItem(item) {
+  const session = state.buySessions.find((candidate) => candidate.items.includes(item));
   await updateMarketPrice(item);
-  saveBuySession();
-  renderBuySession();
+  if (!session) return;
+  saveBuySession(true, session);
+  if (session.id === state.buySession.id) {
+    renderBuySession();
+  } else {
+    renderLocalSessions();
+  }
 }
 
 async function runPool(items, concurrency, worker) {
@@ -733,7 +763,8 @@ async function runPool(items, concurrency, worker) {
 
 async function refreshAll() {
   const buying = state.view === "buy";
-  const items = buying ? state.buySession.items : state.inventory;
+  const buySession = buying ? state.buySession : null;
+  const items = buying ? buySession.items : state.inventory;
   if (!items.length || state.refreshing) return;
   state.refreshing = true;
   elements.refreshAllButton.disabled = true;
@@ -746,8 +777,12 @@ async function refreshAll() {
     await updateMarketPrice(item);
     completed += 1;
     if (buying) {
-      saveBuySession();
-      renderBuySession();
+      saveBuySession(true, buySession);
+      if (buySession.id === state.buySession.id) {
+        renderBuySession();
+      } else {
+        renderLocalSessions();
+      }
     } else {
       saveInventory();
       renderInventory();
