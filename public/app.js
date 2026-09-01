@@ -6,6 +6,7 @@ import {
   formatRelativeDate,
   inventoryKey,
   inventoryToCsv,
+  normalizeBuySessionStore,
   normalizePercentage,
   normalizeMarketPrice,
   summarizeBuySession,
@@ -15,6 +16,7 @@ import {
 const STORAGE_KEY = "card-show-inventory:v1";
 const SETTINGS_KEY = "card-show-inventory:settings:v1";
 const BUY_SESSION_KEY = "card-show-inventory:buy-session:v1";
+const BUY_SESSION_STORE_KEY = "card-show-inventory:buy-sessions:v1";
 const CONDITIONS = [
   ["nearMint", "Near Mint"],
   ["lightlyPlayed", "Lightly Played"],
@@ -25,6 +27,7 @@ const CONDITIONS = [
 
 const elements = {
   backupButton: document.querySelector("#backupButton"),
+  buyBackupButton: document.querySelector("#buyBackupButton"),
   buyCardCount: document.querySelector("#buyCardCount"),
   buyConditionedValue: document.querySelector("#buyConditionedValue"),
   buyEmptyState: document.querySelector("#buyEmptyState"),
@@ -32,8 +35,8 @@ const elements = {
   buyMarketValue: document.querySelector("#buyMarketValue"),
   buyOfferTotal: document.querySelector("#buyOfferTotal"),
   buyPanel: document.querySelector("#buyPanel"),
+  buySessionName: document.querySelector("#buySessionName"),
   buySummary: document.querySelector("#buySummary"),
-  clearBuySessionButton: document.querySelector("#clearBuySessionButton"),
   conditionSettings: [...document.querySelectorAll("[data-condition-setting]")],
   defaultBuyPercent: document.querySelector("#defaultBuyPercent"),
   emptyState: document.querySelector("#emptyState"),
@@ -45,7 +48,10 @@ const elements = {
   inventorySort: document.querySelector("#inventorySort"),
   inventorySummary: document.querySelector("#inventorySummary"),
   lastRefresh: document.querySelector("#lastRefresh"),
+  localSessionCount: document.querySelector("#localSessionCount"),
+  localSessionList: document.querySelector("#localSessionList"),
   marketValue: document.querySelector("#marketValue"),
+  newBuySessionButton: document.querySelector("#newBuySessionButton"),
   onlineStatus: document.querySelector("#onlineStatus"),
   priceChartingToken: document.querySelector("#priceChartingToken"),
   productCount: document.querySelector("#productCount"),
@@ -71,6 +77,11 @@ const elements = {
 
 const savedSettings = readJson(SETTINGS_KEY, {});
 const savedBuySession = readJson(BUY_SESSION_KEY, {});
+const savedBuySessionStore = normalizeBuySessionStore(
+  readJson(BUY_SESSION_STORE_KEY, null),
+  savedBuySession,
+  () => crypto.randomUUID()
+);
 const state = {
   inventory: readJson(STORAGE_KEY, []),
   settings: {
@@ -80,14 +91,19 @@ const state = {
       ...(savedSettings.conditionPercentages || {})
     }
   },
-  buySession: {
-    items: Array.isArray(savedBuySession.items) ? savedBuySession.items : [],
-    defaultBuyPercent: normalizePercentage(savedBuySession.defaultBuyPercent, 70)
-  },
+  buySessions: savedBuySessionStore.sessions,
+  buySession: savedBuySessionStore.sessions.find(
+    (session) => session.id === savedBuySessionStore.activeSessionId
+  ),
   searchResults: [],
   refreshing: false,
   view: location.hash === "#buy" ? "buy" : "inventory"
 };
+if (writeJson(BUY_SESSION_STORE_KEY, savedBuySessionStore)) {
+  removeStorageItem(BUY_SESSION_KEY);
+} else {
+  showStatus("Local session storage is unavailable or full. Changes may not persist.", "error");
+}
 
 elements.priceChartingToken.value = state.settings.priceChartingToken || "";
 elements.defaultBuyPercent.value = state.buySession.defaultBuyPercent;
@@ -104,12 +120,67 @@ function readJson(key, fallback) {
   }
 }
 
+function writeJson(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function removeStorageItem(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    return;
+  }
+}
+
 function saveInventory() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.inventory));
 }
 
-function saveBuySession() {
-  localStorage.setItem(BUY_SESSION_KEY, JSON.stringify(state.buySession));
+function saveBuySession(touch = true, session = state.buySession) {
+  if (touch) {
+    session.updatedAt = new Date().toISOString();
+  }
+  const saved = writeJson(BUY_SESSION_STORE_KEY, {
+    activeSessionId: state.buySession.id,
+    sessions: state.buySessions
+  });
+  if (saved) {
+    removeStorageItem(BUY_SESSION_KEY);
+  } else {
+    showStatus("Local session storage is unavailable or full. Changes may not persist.", "error");
+  }
+  return saved;
+}
+
+function createBuySession(name = "") {
+  const timestamp = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    name,
+    items: [],
+    defaultBuyPercent: 70,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+}
+
+function buySessionLabel(session) {
+  const name = String(session.name || "").trim();
+  if (name) return name;
+  const date = new Date(session.createdAt);
+  return Number.isNaN(date.getTime())
+    ? "Untitled buy"
+    : `Buy · ${date.toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      })}`;
 }
 
 function saveSettings() {
@@ -124,6 +195,27 @@ function download(filename, content, type) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadBackup() {
+  download(
+    `card-show-inventory-backup-${new Date().toISOString().slice(0, 10)}.json`,
+    JSON.stringify(
+      {
+        version: 2,
+        exportedAt: new Date().toISOString(),
+        inventory: state.inventory,
+        buySessions: {
+          activeSessionId: state.buySession.id,
+          sessions: state.buySessions
+        },
+        conditionPercentages: state.settings.conditionPercentages
+      },
+      null,
+      2
+    ),
+    "application/json"
+  );
 }
 
 function productImage(item, className = "") {
@@ -336,6 +428,7 @@ function renderBuySession() {
   elements.buyMarketValue.textContent = formatCurrency(summary.marketValue);
   elements.buyConditionedValue.textContent = formatCurrency(summary.conditionedValue);
   elements.buyOfferTotal.textContent = formatCurrency(summary.offerTotal);
+  elements.buySessionName.value = state.buySession.name;
   elements.buyEmptyState.hidden = state.buySession.items.length > 0;
 
   elements.buyList.innerHTML = state.buySession.items
@@ -417,6 +510,42 @@ function renderBuySession() {
                 <button class="text-button" data-buy-refresh="${id}" type="button">Refresh</button>
               </div>
             </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+  renderLocalSessions();
+}
+
+function renderLocalSessions() {
+  elements.localSessionCount.textContent = state.buySessions.length.toLocaleString();
+  elements.localSessionList.innerHTML = [...state.buySessions]
+    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+    .map((session) => {
+      const summary = summarizeBuySession(
+        session.items,
+        session.defaultBuyPercent,
+        state.settings.conditionPercentages
+      );
+      const id = escapeHtml(session.id);
+      const active = session.id === state.buySession.id;
+      return `
+        <article class="local-session-item${active ? " active" : ""}">
+          <div>
+            <strong>${escapeHtml(buySessionLabel(session))}</strong>
+            <span>${summary.cards} card${summary.cards === 1 ? "" : "s"} · ${formatCurrency(
+              summary.offerTotal
+            )} offer · ${formatRelativeDate(session.updatedAt)}</span>
+          </div>
+          <div class="local-session-actions">
+            ${
+              active
+                ? '<span class="current-session">Current</span>'
+                : `<button class="text-button" data-session-open="${id}" type="button">Open</button>`
+            }
+            <button class="text-button" data-session-duplicate="${id}" type="button">Copy</button>
+            <button class="text-button danger-text" data-session-delete="${id}" type="button">Delete</button>
           </div>
         </article>
       `;
@@ -611,9 +740,15 @@ async function refreshInventoryItem(item) {
 }
 
 async function refreshBuyItem(item) {
+  const session = state.buySessions.find((candidate) => candidate.items.includes(item));
   await updateMarketPrice(item);
-  saveBuySession();
-  renderBuySession();
+  if (!session) return;
+  saveBuySession(true, session);
+  if (session.id === state.buySession.id) {
+    renderBuySession();
+  } else {
+    renderLocalSessions();
+  }
 }
 
 async function runPool(items, concurrency, worker) {
@@ -628,7 +763,8 @@ async function runPool(items, concurrency, worker) {
 
 async function refreshAll() {
   const buying = state.view === "buy";
-  const items = buying ? state.buySession.items : state.inventory;
+  const buySession = buying ? state.buySession : null;
+  const items = buying ? buySession.items : state.inventory;
   if (!items.length || state.refreshing) return;
   state.refreshing = true;
   elements.refreshAllButton.disabled = true;
@@ -641,8 +777,12 @@ async function refreshAll() {
     await updateMarketPrice(item);
     completed += 1;
     if (buying) {
-      saveBuySession();
-      renderBuySession();
+      saveBuySession(true, buySession);
+      if (buySession.id === state.buySession.id) {
+        renderBuySession();
+      } else {
+        renderLocalSessions();
+      }
     } else {
       saveInventory();
       renderInventory();
@@ -747,19 +887,77 @@ elements.defaultBuyPercent.addEventListener("change", () => {
   saveBuySession();
   renderBuySession();
 });
-elements.clearBuySessionButton.addEventListener("click", () => {
-  if (
-    state.buySession.items.length &&
-    !window.confirm("Clear every card and start a new buy session?")
-  ) {
-    return;
-  }
-  state.buySession.items = [];
+elements.buySessionName.addEventListener("input", () => {
+  state.buySession.name = elements.buySessionName.value;
   saveBuySession();
-  renderBuySession();
+});
+elements.buySessionName.addEventListener("change", renderLocalSessions);
+elements.newBuySessionButton.addEventListener("click", () => {
+  const session = createBuySession();
+  state.buySessions.unshift(session);
+  state.buySession = session;
+  elements.defaultBuyPercent.value = session.defaultBuyPercent;
   state.searchResults = [];
   renderSearchResults();
   hideStatus();
+  saveBuySession();
+  renderBuySession();
+  elements.buySessionName.focus();
+});
+elements.localSessionList.addEventListener("click", (event) => {
+  const openButton = event.target.closest("[data-session-open]");
+  if (openButton) {
+    const session = state.buySessions.find((item) => item.id === openButton.dataset.sessionOpen);
+    if (!session) return;
+    state.buySession = session;
+    elements.defaultBuyPercent.value = session.defaultBuyPercent;
+    state.searchResults = [];
+    saveBuySession(false);
+    renderSearchResults();
+    hideStatus();
+    renderBuySession();
+    return;
+  }
+  const duplicateButton = event.target.closest("[data-session-duplicate]");
+  if (duplicateButton) {
+    const source = state.buySessions.find(
+      (item) => item.id === duplicateButton.dataset.sessionDuplicate
+    );
+    if (!source) return;
+    const session = createBuySession(`${buySessionLabel(source)} copy`);
+    session.defaultBuyPercent = source.defaultBuyPercent;
+    session.items = source.items.map((item) => ({
+      ...item,
+      buyItemId: crypto.randomUUID()
+    }));
+    state.buySessions.unshift(session);
+    state.buySession = session;
+    elements.defaultBuyPercent.value = session.defaultBuyPercent;
+    state.searchResults = [];
+    saveBuySession();
+    renderSearchResults();
+    hideStatus();
+    renderBuySession();
+    return;
+  }
+  const deleteButton = event.target.closest("[data-session-delete]");
+  if (!deleteButton) return;
+  const session = state.buySessions.find(
+    (item) => item.id === deleteButton.dataset.sessionDelete
+  );
+  if (!session || !window.confirm(`Delete "${buySessionLabel(session)}" from this browser?`)) {
+    return;
+  }
+  state.buySessions = state.buySessions.filter((item) => item.id !== session.id);
+  if (!state.buySessions.length) {
+    state.buySessions = [createBuySession()];
+  }
+  if (state.buySession.id === session.id) {
+    state.buySession = state.buySessions[0];
+    elements.defaultBuyPercent.value = state.buySession.defaultBuyPercent;
+  }
+  saveBuySession(false);
+  renderBuySession();
 });
 elements.saveConditionSettingsButton.addEventListener("click", () => {
   for (const input of elements.conditionSettings) {
@@ -802,23 +1000,55 @@ elements.exportCsvButton.addEventListener("click", () => {
     "text/csv;charset=utf-8"
   );
 });
-elements.backupButton.addEventListener("click", () => {
-  download(
-    `card-show-inventory-backup-${new Date().toISOString().slice(0, 10)}.json`,
-    JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), inventory: state.inventory }, null, 2),
-    "application/json"
-  );
-});
+elements.backupButton.addEventListener("click", downloadBackup);
+elements.buyBackupButton.addEventListener("click", downloadBackup);
 elements.restoreInput.addEventListener("change", async () => {
   const file = elements.restoreInput.files?.[0];
   if (!file) return;
   try {
     const backup = JSON.parse(await file.text());
-    if (!Array.isArray(backup.inventory)) throw new Error("That file is not an inventory backup.");
-    state.inventory = backup.inventory;
+    if (!Array.isArray(backup.inventory) && !Array.isArray(backup.buySessions?.sessions)) {
+      throw new Error("That file is not a card show backup.");
+    }
+    if (Array.isArray(backup.inventory)) {
+      state.inventory = backup.inventory;
+    }
+    if (Array.isArray(backup.buySessions?.sessions)) {
+      const restoredStore = normalizeBuySessionStore(
+        backup.buySessions,
+        null,
+        () => crypto.randomUUID()
+      );
+      state.buySessions = restoredStore.sessions;
+      state.buySession =
+        state.buySessions.find((session) => session.id === restoredStore.activeSessionId) ||
+        state.buySessions[0];
+      elements.defaultBuyPercent.value = state.buySession.defaultBuyPercent;
+      saveBuySession(false);
+    }
+    if (backup.conditionPercentages && typeof backup.conditionPercentages === "object") {
+      state.settings.conditionPercentages = Object.fromEntries(
+        CONDITIONS.map(([condition]) => [
+          condition,
+          normalizePercentage(
+            backup.conditionPercentages[condition],
+            DEFAULT_CONDITION_PERCENTAGES[condition]
+          )
+        ])
+      );
+      for (const input of elements.conditionSettings) {
+        input.value = state.settings.conditionPercentages[input.dataset.conditionSetting];
+      }
+      saveSettings();
+    }
     saveInventory();
-    renderInventory();
-    showStatus(`${state.inventory.length} products restored.`, "success");
+    renderView();
+    showStatus(
+      Array.isArray(backup.buySessions?.sessions)
+        ? "Inventory and local buy sessions restored."
+        : `${state.inventory.length} products restored.`,
+      "success"
+    );
   } catch (error) {
     showStatus(error.message, "error");
   } finally {

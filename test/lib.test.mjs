@@ -4,6 +4,7 @@ import {
   calculateBuyOffer,
   inventoryKey,
   inventoryToCsv,
+  normalizeBuySessionStore,
   normalizePercentage,
   summarizeBuySession,
   summarizeInventory
@@ -79,6 +80,46 @@ test("normalizePercentage clamps values between zero and one hundred", () => {
   assert.equal(normalizePercentage(125), 100);
   assert.equal(normalizePercentage(-5), 0);
   assert.equal(normalizePercentage("", 70), 70);
+});
+
+test("normalizeBuySessionStore migrates the legacy current session", () => {
+  const store = normalizeBuySessionStore(
+    null,
+    { items: [{ name: "Lightning Bolt" }], defaultBuyPercent: 65 },
+    () => "session-1",
+    "2026-08-31T12:00:00.000Z"
+  );
+  assert.deepEqual(store, {
+    activeSessionId: "session-1",
+    sessions: [
+      {
+        id: "session-1",
+        name: "",
+        items: [{ name: "Lightning Bolt" }],
+        defaultBuyPercent: 65,
+        createdAt: "2026-08-31T12:00:00.000Z",
+        updatedAt: "2026-08-31T12:00:00.000Z"
+      }
+    ]
+  });
+});
+
+test("normalizeBuySessionStore keeps a valid active saved session", () => {
+  const store = normalizeBuySessionStore(
+    {
+      activeSessionId: "session-2",
+      sessions: [
+        { id: "session-1", items: [], defaultBuyPercent: 70 },
+        { id: "session-2", name: "Friday seller", items: [], defaultBuyPercent: 60 }
+      ]
+    },
+    null,
+    () => "unused",
+    "2026-08-31T12:00:00.000Z"
+  );
+  assert.equal(store.activeSessionId, "session-2");
+  assert.equal(store.sessions[1].name, "Friday seller");
+  assert.equal(store.sessions[1].defaultBuyPercent, 60);
 });
 
 test("inventoryToCsv escapes commas and quotes", () => {
