@@ -8,11 +8,11 @@ An intentionally small, local-first inventory app for Magic: The Gathering and P
 - Optionally searches PriceCharting with a paid PriceCharting API token.
 - Adds products to a browser-local inventory with quantity tracking.
 - Refreshes the entire inventory's market prices with one button.
-- Builds a seller buy session with condition adjustments and configurable offer percentages.
+- Builds and retains named seller buy sessions with condition adjustments and configurable offers.
 - Exports CSV and JSON backups.
-- Installs as a lightweight PWA; inventory remains available offline.
+- Installs as a lightweight PWA; inventory and saved buy sessions remain available offline.
 
-Inventory, the current buy session, and API settings are stored only in the current browser. There is no account, database, or analytics.
+Inventory, buy-session history, and API settings are stored only in the current browser. There is no account, database, or analytics.
 
 ## Buy sessions
 
@@ -24,8 +24,13 @@ Open **Buy Session**, search for each card, and select **Add to buy**. Each phys
 - Edit the condition percentages from **Condition values**.
 - See market value, condition-adjusted value, and the cash offer per card and for the full transaction.
 - Refresh one card or every card in the session without losing the current offer settings.
+- Name a session for the seller, event, or transaction.
+- Start a new session without deleting the previous one.
+- Reopen, copy, or delete prior sessions from **Local sessions**.
 
-The offer is `market price × condition percentage × buy percentage`. The current session is saved in local browser storage until **New session** is selected.
+The offer is `market price × condition percentage × buy percentage`. Every change is saved automatically in persistent browser storage, including across browser restarts. **New session** starts a clean transaction while keeping prior sessions on that device.
+
+Use **Backup** to download inventory, local buy sessions, and condition settings as JSON. Backups do not include the PriceCharting API token.
 
 ## Pricing sources
 

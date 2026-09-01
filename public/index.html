@@ -198,11 +198,22 @@
                 <button class="secondary" id="saveConditionSettingsButton" type="button">Save condition values</button>
               </div>
             </details>
-            <button class="secondary" id="clearBuySessionButton" type="button">New session</button>
+            <button class="secondary" id="buyBackupButton" type="button">Backup</button>
+            <button class="secondary" id="newBuySessionButton" type="button">New session</button>
           </div>
         </div>
 
         <div class="buy-transaction-bar">
+          <label class="session-name-field" for="buySessionName">
+            Session name
+            <input
+              id="buySessionName"
+              type="text"
+              maxlength="80"
+              placeholder="Seller name or note"
+            />
+            <span>Saved automatically on this device.</span>
+          </label>
           <label for="defaultBuyPercent">
             Transaction buy %
             <span>Used unless a card has its own percentage.</span>
@@ -212,6 +223,15 @@
             <span>%</span>
           </div>
         </div>
+
+        <details class="local-sessions" id="localSessionsPanel">
+          <summary>
+            <span>Local sessions</span>
+            <strong id="localSessionCount">1</strong>
+          </summary>
+          <p>Reopen, copy, or remove buy sessions stored in this browser.</p>
+          <div class="local-session-list" id="localSessionList"></div>
+        </details>
 
         <div class="empty-state" id="buyEmptyState">
           <div class="empty-icon" aria-hidden="true">◇</div>

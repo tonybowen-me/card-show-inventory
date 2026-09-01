@@ -61,6 +61,32 @@ export function normalizePercentage(value, fallback = 0) {
   return Math.min(100, Math.max(0, Number(value) || 0));
 }
 
+export function normalizeBuySessionStore(store, legacySession, createId, now) {
+  const fallbackTime = String(now || new Date().toISOString());
+  const normalizeSession = (session = {}) => {
+    const createdAt = String(session.createdAt || fallbackTime);
+    return {
+      id: String(session.id || createId()),
+      name: String(session.name || ""),
+      items: Array.isArray(session.items) ? session.items : [],
+      defaultBuyPercent: normalizePercentage(session.defaultBuyPercent, 70),
+      createdAt,
+      updatedAt: String(session.updatedAt || createdAt)
+    };
+  };
+  let sessions = Array.isArray(store?.sessions) ? store.sessions.map(normalizeSession) : [];
+  if (!sessions.length && legacySession && typeof legacySession === "object") {
+    sessions = [normalizeSession(legacySession)];
+  }
+  if (!sessions.length) {
+    sessions = [normalizeSession()];
+  }
+  const activeSessionId = sessions.some((session) => session.id === store?.activeSessionId)
+    ? store.activeSessionId
+    : sessions[0].id;
+  return { activeSessionId, sessions };
+}
+
 function roundCurrency(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
